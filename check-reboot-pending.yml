@@ -1,0 +1,29 @@
+- name: Examine registry locations identify a pending reboot
+  win_shell: |
+
+    $results = @{'needs_reboot'=$false ; 'reason'=@()}
+    $regpath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"
+    if (Get-Item -Path $regpath -ErrorAction Ignore) {
+      $results['needs_reboot']=$true
+      $results['reason']+='WindowsUpdate'
+    }
+
+    try {
+      $util = [wmiclass]"\\.\rootzccm\clientsdk:CCM_ClientUtilities"
+      $status = $util.DetermineIfRebootPending()
+      if(($status -ne $null) -and $status.RebootPending){
+        $results['needs_reboot']=$true
+        $results['reason']+='CCM_RebootPending'  
+      }
+    } catch{}
+
+    return $results | ConvertTo-Json
+  register: needs_reboot
+
+- name: set needs_reboot for other roles
+  set_fact:
+    needs_reboot: "{{ needs_reboot.stdout.needs_reboot|default(false) }}"
+  
+- name: debug output
+  debug:
+    var: needs_reboot
